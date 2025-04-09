@@ -1,0 +1,7 @@
+dataset:
+  name: ODE_Lorenz
+  pair_id: [1, 2, 3, 4, 5, 6]  # Run on sub-datasets 1, 2, and 3
+model:
+  name: CTF_NaiveBaselines
+  method: constant
+  constant_value: 0.0
