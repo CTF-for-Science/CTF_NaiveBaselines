@@ -1,0 +1,7 @@
+dataset:
+  name: PDE_KS
+  pair_id: [1]
+model:
+  name: CTF_NaiveBaselines
+  method: constant
+  constant_value: 0.0

@@ -32,11 +32,11 @@ def main(config_path: str) -> None:
     #   e.g. f"batch_{learning_rate}_"
     batch_id = f"batch_"
     if config['model']['method'] == 'constant':
-        constant_value = config['model']['method']['constant_value']
+        constant_value = config['model']['constant_value']
         batch_id = batch_id + f"{constant_value}"
     elif config['model']['method'] == 'random':
-        distribution = config['model']['method']['random_distribution']
-        seed = config['model']['method']['random_seed']
+        distribution = config['model']['random_distribution']
+        seed = config['model']['random_seed']
         batch_id = batch_id + f"{distribution}_{seed}"
     elif config['model']['method'] == 'average':
         batch_id = batch_id + f"avg"
