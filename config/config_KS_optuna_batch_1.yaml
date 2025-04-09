@@ -1,0 +1,11 @@
+dataset:
+  name: ODE_Lorenz
+  pair_id: [4]
+model:
+  name: CTF_NaiveBaselines
+  method: optuna
+  optuna_lower_bound: -10.0
+  optuna_upper_bound: 10.0
+  optuna_n_values: 10
+  optuna_seed: 42
+

@@ -1,5 +1,7 @@
+import optuna
 import numpy as np
 from typing import Optional, Dict
+from ctf4science.eval_module import evaluate
 
 class NaiveBaseline:
     """
@@ -14,7 +16,7 @@ class NaiveBaseline:
         random_params (Optional[Dict]): Parameters for 'random' method.
     """
 
-    def __init__(self, config: Dict, train_data: Optional[np.ndarray] = None):
+    def __init__(self, config: Dict, train_data: Optional[np.ndarray] = None, pair_id: Optional[int] = None):
         """
         Initialize the NaiveBaseline model with the provided configuration.
 
@@ -23,6 +25,8 @@ class NaiveBaseline:
             train_data (Optional[np.ndarray]): Training data for 'average' method.
         """
         self.method = config['model']['method']
+        self.dataset_name = config['dataset']['name']
+        self.pair_id = pair_id
         self.train_data = train_data
 
         if self.method == 'constant':
@@ -33,6 +37,13 @@ class NaiveBaseline:
                 'upper_bound': config['model']['random_upper_bound'],
                 'n_values': config['model']['random_n_values'],
                 'distribution': config['model']['random_distribution'],
+                'seed': config['model'].get('random_seed', None)
+            }
+        elif self.method == 'optuna':
+            self.optuna_params = {
+                'lower_bound': config['model']['optuna_lower_bound'],
+                'upper_bound': config['model']['optuna_upper_bound'],
+                'n_values': config['model']['optuna_n_values'],
                 'seed': config['model'].get('random_seed', None)
             }
 
@@ -85,6 +96,53 @@ class NaiveBaseline:
 
             # For simplicity, just use the first constant (no evaluation here)
             pred_data = np.full_like(test_data, constants[0])
+
+        elif self.method == 'optuna':
+            # Check inputs
+            if self.pair_id is None:
+                raise Exception("pair_id is required for `optuna` method.")
+            if self.dataset_name is None:
+                raise Exception("dataset_name is required for `optuna` method.")
+
+            # Set seed
+            seed = self.optuna_params.get('seed', None)
+            if seed is not None:
+                np.random.seed(seed)
+
+            # Define objective
+            def objective(trial):
+                # Generate constant
+                constant_val = trial.suggest_float('constant_val', self.optuna_params['lower_bound'], self.optuna_params['upper_bound'])
+                # Generate prediction
+                pred_data = np.full_like(test_data, constant_val)
+                # Evaluate prediction
+                results = evaluate(self.dataset_name, self.pair_id, test_data, pred_data)
+                # For simplicity, optimize 'short_time'
+                score = results['short_time'].item()
+                # Return score
+                return score
+
+            # Create optuna study with dashboard
+            try:
+                optuna.delete_study(study_name="ctf-baseline", storage="sqlite:///db.sqlite3")
+            except:
+                pass
+            study = optuna.create_study(
+                direction='maximize',
+                storage="sqlite:///db.sqlite3",
+                study_name="ctf-baseline"
+            )
+            
+            # Run optimization
+            study.optimize(objective, n_trials = self.optuna_params['n_values'])
+
+            # Return prediction matrix using best hyperparameter value
+            best_constant = study.best_params['constant_val']
+            pred_data = np.full_like(test_data, best_constant)
+            print(f"Best value: {study.best_value} (params: {study.best_params})")
+
+            # Check dashboard with: `optuna-dashboard sqlite:///db.sqlite3 --port <REMOTE PORT>`
+            # Port forward to remote machine with: `ssh -L <LOCAL PORT>:localhost:<REMOTE PORT> <REMOTE>`
 
         else:
             raise ValueError(f"Unknown baseline method: {self.method}")
