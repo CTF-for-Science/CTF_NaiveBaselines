@@ -183,3 +183,4 @@ results/
 Errors.md
 test.py
 lightning_logs/
+.python-version
