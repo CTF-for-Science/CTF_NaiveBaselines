@@ -1,0 +1,6 @@
+dataset:
+  name: PDE_KS
+  # pair_id omitted or set to 'all' to run on all sub-datasets
+model:
+  name: CTF_NaiveBaselines
+  method: average
