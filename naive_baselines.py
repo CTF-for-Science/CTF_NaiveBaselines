@@ -1,7 +1,24 @@
-import optuna
 import numpy as np
+import importlib
 from typing import Optional, Dict
 from ctf4science.eval_module import evaluate
+
+def import_if_available(name:str, package:Optional[str]=None):
+    """
+    A function which attempts to import a module and (optionally) a package from
+    that module.
+
+    Attributes:
+        name (str): The module to import.
+        package (Optional[str]): A package from the module to import.
+
+    Returns:
+        The imported package or module.
+    """
+    try:
+        return importlib.import_module(name, package)
+    except ImportError:
+        return None
 
 class NaiveBaseline:
     """
@@ -98,6 +115,13 @@ class NaiveBaseline:
             pred_data = np.full_like(test_data, constants[0])
 
         elif self.method == 'optuna':
+            # Check if optuna is installed
+            optuna = import_if_available('optuna')
+            if optuna is None:
+                raise Exception("Package 'optuna' not installed")
+            else:
+                print("Imported optuna!")
+
             # Check inputs
             if self.pair_id is None:
                 raise Exception("pair_id is required for `optuna` method.")
