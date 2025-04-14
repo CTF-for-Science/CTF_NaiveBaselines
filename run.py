@@ -3,7 +3,8 @@ import yaml
 from pathlib import Path
 from typing import List, Dict, Any
 import datetime
-from ctf4science.data_module import load_dataset, parse_pair_ids, get_applicable_plots
+import numpy as np
+from ctf4science.data_module import load_dataset, get_prediction_horizon_steps, parse_pair_ids, get_applicable_plots
 from ctf4science.eval_module import evaluate, save_results
 from ctf4science.visualization_module import Visualization
 from naive_baselines import NaiveBaseline
@@ -64,13 +65,23 @@ def main(config_path: str) -> None:
     # Process each sub-dataset
     for pair_id in pair_ids:
         # Load sub-dataset
-        train_data, test_data = load_dataset(dataset_name, pair_id)
+        train_data, test_data, init_data = load_dataset(dataset_name, pair_id)
+
+        if init_data is None:
+            # Stack all training matrices to get a single training matrix
+            train_data = np.concatenate(train_data, axis=1)
+        else:
+            # If we are given a burn-in matrix, use it as the training matrix
+            train_data = init_data
+
+        # Load metadata (to provide forecast length)
+        prediction_horizon_steps = get_prediction_horizon_steps(dataset_name, pair_id)
 
         # Initialize the model with the config and train_data
-        model = NaiveBaseline(config, train_data, pair_id)
+        model = NaiveBaseline(config, train_data, prediction_horizon_steps, pair_id)
 
         # Generate predictions
-        pred_data = model.predict(test_data)
+        pred_data = model.predict()
 
         # Evaluate predictions using default metrics
         results = evaluate(dataset_name, pair_id, test_data, pred_data)
@@ -88,7 +99,7 @@ def main(config_path: str) -> None:
 
         # Generate and save visualizations that are applicable to this dataset
         for plot_type in applicable_plots:
-            fig = viz.plot_from_run(dataset_name, pair_id, results_directory, plot_type=plot_type)
+            fig = viz.plot_from_batch(dataset_name, pair_id, results_directory, plot_type=plot_type)
             viz.save_figure_results(fig, dataset_name, model_name, batch_id, pair_id, plot_type)
 
     # Save aggregated batch results

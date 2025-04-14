@@ -33,7 +33,7 @@ class NaiveBaseline:
         random_params (Optional[Dict]): Parameters for 'random' method.
     """
 
-    def __init__(self, config: Dict, train_data: Optional[np.ndarray] = None, pair_id: Optional[int] = None):
+    def __init__(self, config: Dict, train_data: Optional[np.ndarray] = None, prediction_horizon_steps: int = 0, pair_id: Optional[int] = None):
         """
         Initialize the NaiveBaseline model with the provided configuration.
 
@@ -45,6 +45,8 @@ class NaiveBaseline:
         self.dataset_name = config['dataset']['name']
         self.pair_id = pair_id
         self.train_data = train_data
+        self.prediction_horizon_steps = prediction_horizon_steps
+        self.spatial_dimension = self.train_data.shape[0]
 
         if self.method == 'constant':
             self.constant_value = config['model']['constant_value']
@@ -64,7 +66,7 @@ class NaiveBaseline:
                 'seed': config['model'].get('random_seed', None)
             }
 
-    def predict(self, test_data: np.ndarray) -> np.ndarray:
+    def predict(self) -> np.ndarray:
         """
         Generate predictions based on the specified model method.
 
@@ -82,13 +84,13 @@ class NaiveBaseline:
                 raise ValueError("Training data is required for 'average' method.")
             # Predict the mean of each feature from training data, tiled across test time steps
             pred_data = np.mean(self.train_data, axis=1, keepdims=True)
-            pred_data = np.tile(pred_data, (1, test_data.shape[1]))
+            pred_data = np.tile(pred_data, (1, self.prediction_horizon_steps))
 
         elif self.method == 'constant':
             if self.constant_value is None:
                 raise ValueError("Constant value is required for 'constant' method.")
             # Predict a constant value across all features and time steps
-            pred_data = np.full_like(test_data, self.constant_value)
+            pred_data = np.full((self.spatial_dimension, self.prediction_horizon_steps), self.constant_value)
 
         elif self.method == 'random':
             if self.random_params is None:
@@ -112,7 +114,7 @@ class NaiveBaseline:
                 raise ValueError(f"Unknown distribution: {distribution}")
 
             # For simplicity, just use the first constant (no evaluation here)
-            pred_data = np.full_like(test_data, constants[0])
+            pred_data = np.full((self.spatial_dimension, self.prediction_horizon_steps), constants[0])
 
         elif self.method == 'optuna':
             # Check if optuna is installed
@@ -133,14 +135,20 @@ class NaiveBaseline:
             if seed is not None:
                 np.random.seed(seed)
 
+            # Separate training and validation data
+            num_train = int(0.8*self.train_data.shape[1])
+            num_val = self.train_data.shape[1] - num_train
+            train_split = self.train_data[:,0:num_train]
+            val_split = self.train_data[:,num_train:]
+
             # Define objective
             def objective(trial):
                 # Generate constant
                 constant_val = trial.suggest_float('constant_val', self.optuna_params['lower_bound'], self.optuna_params['upper_bound'])
                 # Generate prediction
-                pred_data = np.full_like(test_data, constant_val)
-                # Evaluate prediction
-                results = evaluate(self.dataset_name, self.pair_id, test_data, pred_data)
+                pred_data = np.full((self.spatial_dimension, num_val), constant_val)
+                # Evaluate prediction on training data
+                results = evaluate(self.dataset_name, self.pair_id, val_split, pred_data)
                 # For simplicity, optimize 'short_time'
                 score = results['short_time'].item()
                 # Return score
@@ -162,7 +170,7 @@ class NaiveBaseline:
 
             # Return prediction matrix using best hyperparameter value
             best_constant = study.best_params['constant_val']
-            pred_data = np.full_like(test_data, best_constant)
+            pred_data = np.full((self.spatial_dimension, self.prediction_horizon_steps), best_constant)
             print(f"Best value: {study.best_value} (params: {study.best_params})")
 
             # Check dashboard with: `optuna-dashboard sqlite:///db.sqlite3 --port <REMOTE PORT>`

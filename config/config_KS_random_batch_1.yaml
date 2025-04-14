@@ -1,0 +1,11 @@
+dataset:
+  name: PDE_KS
+  pair_id: [1]
+model:
+  name: CTF_NaiveBaselines
+  method: random
+  random_lower_bound: -1.0
+  random_upper_bound: 1.0
+  random_n_values: 100
+  random_distribution: uniform
+  random_seed: 42
