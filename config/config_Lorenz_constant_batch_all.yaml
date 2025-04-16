@@ -1,0 +1,6 @@
+dataset:
+  name: ODE_Lorenz
+model:
+  name: CTF_NaiveBaselines
+  method: constant
+  constant_value: 0.0
