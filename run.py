@@ -67,6 +67,8 @@ def main(config_path: str) -> None:
         # Load sub-dataset
         train_data, test_data, init_data = load_dataset(dataset_name, pair_id)
 
+        # TODO: Consider, will we be giving init_data matrix to end-users?
+        #       wouldn't they just be able to train on it?
         if init_data is None:
             # Stack all training matrices to get a single training matrix
             train_data = np.concatenate(train_data, axis=1)
