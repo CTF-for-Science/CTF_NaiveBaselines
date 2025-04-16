@@ -67,8 +67,7 @@ def main(config_path: str) -> None:
         # Load sub-dataset
         train_data, test_data, init_data = load_dataset(dataset_name, pair_id)
 
-        # TODO: Consider, will we be giving init_data matrix to end-users?
-        #       wouldn't they just be able to train on it?
+        # Load initialization matrix if it exists
         if init_data is None:
             # Stack all training matrices to get a single training matrix
             train_data = np.concatenate(train_data, axis=1)
@@ -93,10 +92,9 @@ def main(config_path: str) -> None:
 
         # Append metrics to batch results
         # Convert metric values to plain Python floats for YAML serialization
-        results_for_yaml = {key: float(value) for key, value in results.items()}
         batch_results['sub_datasets'].append({
             'pair_id': pair_id,
-            'metrics': results_for_yaml
+            'metrics': results
         })
 
         # Generate and save visualizations that are applicable to this dataset
