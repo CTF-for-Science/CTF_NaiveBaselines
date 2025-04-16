@@ -96,7 +96,7 @@ def main(config_path: str) -> None:
         results_for_yaml = {key: float(value) for key, value in results.items()}
         batch_results['sub_datasets'].append({
             'pair_id': pair_id,
-            'metrics': results
+            'metrics': results_for_yaml
         })
 
         # Generate and save visualizations that are applicable to this dataset
