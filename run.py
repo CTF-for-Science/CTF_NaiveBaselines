@@ -53,7 +53,7 @@ def main(config_path: str) -> None:
         'batch_id': batch_id,
         'model': model_name,
         'dataset': dataset_name,
-        'sub_datasets': []
+        'pairs': []
     }
 
     # Initialize Visualization object
