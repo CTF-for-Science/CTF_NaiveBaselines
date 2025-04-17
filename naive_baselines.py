@@ -1,7 +1,7 @@
 import numpy as np
 import importlib
 from typing import Optional, Dict
-from ctf4science.eval_module import evaluate
+from ctf4science.eval_module import evaluate_custom
 
 def import_if_available(name:str, package:Optional[str]=None):
     """
@@ -148,9 +148,9 @@ class NaiveBaseline:
                 # Generate prediction
                 pred_data = np.full((self.spatial_dimension, num_val), constant_val)
                 # Evaluate prediction on training data
-                results = evaluate(self.dataset_name, self.pair_id, val_split, pred_data)
+                results = evaluate_custom(self.dataset_name, self.pair_id, val_split, pred_data)
                 # For simplicity, optimize 'short_time'
-                score = results['short_time'].item()
+                score = results['short_time']
                 # Return score
                 return score
 
