@@ -15,6 +15,19 @@ file_dir = Path(__file__).parent
 results_file = file_dir / 'results.yaml'
 
 def sum_results(results):
+    """
+    Sums all metric values from a results dictionary containing evaluation metrics.
+    
+    Iterates through all pairs in the results dictionary and sums all metric values
+    found in each pair's 'metrics' dictionary. This is used to aggregate
+    evaluation metrics from a batch_results.yaml file.
+
+    Args:
+        results (dict): A dictionary containing evaluation results.
+    
+    Returns:
+        float: The sum of all metric values across all pairs in the results dictionary.
+    """
     total = 0
     for pair_dict in results['pairs']:
         metric_dict = pair_dict['metrics']
@@ -23,6 +36,43 @@ def sum_results(results):
     return total
 
 def suggest_value(name, param_dict, trial):
+    """
+    Suggest a value for a hyperparameter using Optuna's trial object.
+
+    This function provides a unified interface for suggesting both float and integer
+    parameter values within specified bounds, with optional logarithmic scaling.
+
+    Args:
+        name (str): The name of the hyperparameter to optimize. This will be used as the
+                    identifier in the Optuna study.
+        param_dict (dict):
+            Dictionary containing the parameter specification with the following keys:
+            - 'type': str, either 'float' or 'int' indicating the parameter type
+            - 'lower_bound': float/int, the minimum value for the parameter
+            - 'upper_bound': float/int, the maximum value for the parameter
+            - 'log': bool, whether to sample in log space
+        trial (optuna.trial.Trial):
+            The Optuna trial object used for suggesting parameter values.
+
+    Returns:
+        float or int: The suggested value for the parameter, type depends on param_dict['type']
+
+    Raises:
+        Exception:
+            If any of the required keys ('type', 'lower_bound', 'upper_bound', 'log')
+            are missing from param_dict.
+            If the parameter type is neither 'float' nor 'int'.
+
+    Examples:
+
+    >>> param_dict = {
+    ...     'type': 'float',
+    ...     'lower_bound': 1e-5,
+    ...     'upper_bound': 1e-2,
+    ...     'log': True
+    ... }
+    >>> value = suggest_value('learning_rate', param_dict, trial)
+    """
     if 'type' not in param_dict:
         raise Exception(f"\'type\' not in {param_dict} keys")
     if 'upper_bound' not in param_dict:
@@ -42,6 +92,27 @@ def suggest_value(name, param_dict, trial):
     return val
 
 def generate_config(hp_config, template, name, trial):
+    """
+    Generates a configuration file with suggested hyperparameter values.
+
+    This function suggests a value for the constant parameter using Optuna's trial,
+    updates the configuration template with this value, and saves the resulting
+    configuration to a YAML file.
+
+    Args:
+        hp_config (dict): Dictionary containing a hyperparameter information.
+        template (dict): Configuration template dictionary that will be populated with
+            the suggested values.
+        name (str): Name to use for the output configuration file (without extension).
+        trial (optuna.Trial): Optuna trial object used for suggesting parameter values.
+
+    Returns:
+        None: This function doesn't return anything but saves the configuration to disk.
+
+    Side Effects:
+        - Writes a new YAML configuration file to ./config/{name}.yaml
+        - Modifies the input template dictionary by adding the suggested constant value
+    """
     # Generate new constant
     val = suggest_value('constant_value', hp_config['hyperparameters']['constant'], trial)
     # Fill out dictionary
@@ -56,7 +127,7 @@ def main(config_path: str) -> None:
     Main function to generate configuration files and run the naive baseline
     model on specified sub-datasets for hyperparameter optimization.
 
-    Loads configuration, generated specific config files, runs model on training
+    Loads configuration, generates specific config files, runs model on training
     and validation set, and performs hyperparameter optimization.
 
     Args:
@@ -66,7 +137,7 @@ def main(config_path: str) -> None:
     with open(config_path, 'r') as f:
         hp_config = yaml.safe_load(f)
 
-    # Blank dictionary for yaml file
+    # Blank dictionary for runnable yaml file
     yaml_dict = {
         'dataset': {
             'name': hp_config['dataset']['name']
@@ -76,12 +147,11 @@ def main(config_path: str) -> None:
             'method': 'constant',
             'constant_value': None, # This will be replaced
             'train_split': hp_config['model']['train_split'],
-            'burn_in_split': hp_config['model']['burn_in_split'],
             'seed': hp_config['model']['seed']
         }
     }
 
-    # Define objective
+    # Define objective for Optuna
     def objective(trial):
         # Create config file
         generate_config(hp_config, yaml_dict, 'hp_config', trial)
@@ -92,7 +162,7 @@ def main(config_path: str) -> None:
         with open(results_file, 'r') as f:
             results = yaml.safe_load(f)
         score = sum_results(results)
-        # Return
+        # Return score
         return score
 
     # Create optuna study with dashboard
@@ -109,21 +179,21 @@ def main(config_path: str) -> None:
     # Run optimization
     study.optimize(objective, n_trials = hp_config['model']['n_trials'])
 
-    # Remove last results file and hp_config.yaml
+    # Remove last results file and hp_config.yaml (no loose files)
     results_file.unlink(missing_ok=True)
     (file_dir / 'config' / 'hp_config.yaml').unlink(missing_ok=True)
 
-    # Return prediction matrix using best hyperparameter value
+    # Obtain best hyperparameter value
     best_constant = study.best_params['constant_value']
     print(f"Best score: {study.best_value} (params: {study.best_params})")
 
-    # Save final yaml
+    # Save final configuration yaml from hyperparameter optimization
     yaml_dict['model']['constant_value'] = best_constant
     with open(file_dir / 'config' / f'config_{hp_config["dataset"]["name"]}_constant_batch_all.yaml', 'w') as f:
         yaml.dump(yaml_dict, f)
 
-    # Check dashboard with: `optuna-dashboard sqlite:///db.sqlite3 --port <REMOTE PORT>`
-    # Port forward to remote machine with: `ssh -L <LOCAL PORT>:localhost:<REMOTE PORT> <REMOTE>`
+    # You can check the Optuna dashboard with: `optuna-dashboard sqlite:///db.sqlite3 --port <REMOTE PORT>`
+    # Port forward to a remote machine with: `ssh -L <LOCAL PORT>:localhost:<REMOTE PORT> <REMOTE>`
 
     return None
 
