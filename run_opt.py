@@ -18,6 +18,8 @@ results_file.unlink(missing_ok=True)
 # Notes:
 # K value larger than 10 results in invalid spatio-temporal loss
 # Currently just overwriting config file and results file to save space
+# Currently using init_data in hyperparameter optimization
+# Currently not counting init_data in train_split amount
 
 def main(config_path: str) -> None:
     """
@@ -57,7 +59,7 @@ def main(config_path: str) -> None:
     for pair_id in pair_ids:
         # Generate training and validation splits (and burn-in matrix when applicable) 
         train_split = config['model']['train_split']
-        train_data, val_data, init_data = load_validation_dataset(dataset_name, pair_id, train_split)
+        train_data, val_data, init_data, training_timesteps, prediction_timesteps = load_validation_dataset(dataset_name, pair_id, train_split)
 
         # Load initialization matrix if it exists
         if init_data is None:
@@ -68,8 +70,7 @@ def main(config_path: str) -> None:
             train_data = init_data
 
         # Load metadata (to provide forecast length)
-        prediction_timesteps = None # TODO
-        prediction_horizon_steps = val_data.shape[1]
+        prediction_horizon_steps = prediction_timesteps.shape[0]
 
         # Initialize the model with the config and train_data
         model = NaiveBaseline(config, train_data, prediction_horizon_steps, pair_id)

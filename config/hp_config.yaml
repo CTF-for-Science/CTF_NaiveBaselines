@@ -1,7 +1,7 @@
 dataset:
   name: PDE_KS
 model:
-  constant_value: 83.34827304525038
+  constant_value: -14.085370194576612
   method: constant
   name: CTF_NaiveBaselines
   seed: 0
