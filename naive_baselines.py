@@ -58,13 +58,6 @@ class NaiveBaseline:
                 'distribution': config['model']['random_distribution'],
                 'seed': config['model'].get('random_seed', None)
             }
-        elif self.method == 'optuna':
-            self.optuna_params = {
-                'lower_bound': config['model']['optuna_lower_bound'],
-                'upper_bound': config['model']['optuna_upper_bound'],
-                'n_values': config['model']['optuna_n_values'],
-                'seed': config['model'].get('random_seed', None)
-            }
 
     def predict(self) -> np.ndarray:
         """
@@ -115,66 +108,6 @@ class NaiveBaseline:
 
             # For simplicity, just use the first constant (no evaluation here)
             pred_data = np.full((self.spatial_dimension, self.prediction_horizon_steps), constants[0])
-
-        elif self.method == 'optuna':
-            # Check if optuna is installed
-            optuna = import_if_available('optuna')
-            if optuna is None:
-                raise Exception("Package 'optuna' not installed")
-            else:
-                print("Imported optuna!")
-
-            # Check inputs
-            if self.pair_id is None:
-                raise Exception("pair_id is required for `optuna` method.")
-            if self.dataset_name is None:
-                raise Exception("dataset_name is required for `optuna` method.")
-
-            # Set seed
-            seed = self.optuna_params.get('seed', None)
-            if seed is not None:
-                np.random.seed(seed)
-
-            # Separate training and validation data
-            num_train = int(0.8*self.train_data.shape[1])
-            num_val = self.train_data.shape[1] - num_train
-            train_split = self.train_data[:,0:num_train]
-            val_split = self.train_data[:,num_train:]
-
-            # Define objective
-            def objective(trial):
-                # Generate constant
-                constant_val = trial.suggest_float('constant_val', self.optuna_params['lower_bound'], self.optuna_params['upper_bound'])
-                # Generate prediction
-                pred_data = np.full((self.spatial_dimension, num_val), constant_val)
-                # Evaluate prediction on training data
-                results = evaluate_custom(self.dataset_name, self.pair_id, val_split, pred_data)
-                # For simplicity, optimize 'short_time'
-                score = results['short_time']
-                # Return score
-                return score
-
-            # Create optuna study with dashboard
-            try:
-                optuna.delete_study(study_name="ctf-baseline", storage="sqlite:///db.sqlite3")
-            except:
-                pass
-            study = optuna.create_study(
-                direction='maximize',
-                storage="sqlite:///db.sqlite3",
-                study_name="ctf-baseline"
-            )
-            
-            # Run optimization
-            study.optimize(objective, n_trials = self.optuna_params['n_values'])
-
-            # Return prediction matrix using best hyperparameter value
-            best_constant = study.best_params['constant_val']
-            pred_data = np.full((self.spatial_dimension, self.prediction_horizon_steps), best_constant)
-            print(f"Best value: {study.best_value} (params: {study.best_params})")
-
-            # Check dashboard with: `optuna-dashboard sqlite:///db.sqlite3 --port <REMOTE PORT>`
-            # Port forward to remote machine with: `ssh -L <LOCAL PORT>:localhost:<REMOTE PORT> <REMOTE>`
 
         else:
             raise ValueError(f"Unknown baseline method: {self.method}")

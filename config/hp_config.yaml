@@ -1,0 +1,9 @@
+dataset:
+  name: PDE_KS
+model:
+  burn_in_split: 0.4
+  constant_value: 7.110103706234888
+  method: constant
+  name: CTF_NaiveBaselines
+  seed: 0
+  train_split: 0.8
