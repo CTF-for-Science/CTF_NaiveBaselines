@@ -8,8 +8,6 @@ model:
   n_trials: 10
 hyperparameters:
   constant:
-    name: 'constant'
-    type: float # float or int
-    lower_bound: -100.0
-    upper_bound: 100.0
-    log: False # true for log uniform, false for uniform
+    type: uniform
+    lower_bound: -1.0
+    upper_bound: 1.0

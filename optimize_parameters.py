@@ -1,8 +1,9 @@
 import os
 import sys
 import yaml
-import optuna
 import argparse
+from ray import tune
+from ray.tune.search.optuna import OptunaSearch
 from pathlib import Path
 from typing import List, Dict, Any
 import datetime
@@ -41,76 +42,75 @@ def sum_results(results):
             total += metric_dict[metric]
     return total
 
-def suggest_value(name, param_dict, trial):
+def create_search_space(tuning_config):
     """
-    Suggest a value for a hyperparameter using Optuna's trial object.
-
-    This function provides a unified interface for suggesting both float and integer
-    parameter values within specified bounds, with optional logarithmic scaling.
+    Create a Ray Tune search space dictionary from the tuning config flie.
 
     Args:
-        name (str): The name of the hyperparameter to optimize. This will be used as the
-                    identifier in the Optuna study.
-        param_dict (dict):
+        tuning_config (dict):
             Dictionary containing the parameter specification with the following keys:
             - 'type': str, either 'float' or 'int' indicating the parameter type
             - 'lower_bound': float/int, the minimum value for the parameter
             - 'upper_bound': float/int, the maximum value for the parameter
             - 'log': bool, whether to sample in log space
-        trial (optuna.trial.Trial):
-            The Optuna trial object used for suggesting parameter values.
 
     Returns:
-        float or int: The suggested value for the parameter, type depends on param_dict['type']
+        dict: Ray Tune expected search_space dictionary
 
     Raises:
         Exception:
             If any of the required keys ('type', 'lower_bound', 'upper_bound', 'log')
-            are missing from param_dict.
+            are missing from tuning_config for a parameter.
             If the parameter type is neither 'float' nor 'int'.
-
-    Examples:
-
-    >>> param_dict = {
-    ...     'type': 'float',
-    ...     'lower_bound': 1e-5,
-    ...     'upper_bound': 1e-2,
-    ...     'log': True
-    ... }
-    >>> value = suggest_value('learning_rate', param_dict, trial)
     """
-    if 'type' not in param_dict:
-        raise Exception(f"\'type\' not in {param_dict} keys")
-    if 'upper_bound' not in param_dict:
-        raise Exception(f"\'upper_bound\' not in {param_dict} keys")
-    if 'lower_bound' not in param_dict:
-        raise Exception(f"\'lower_bound\' not in {param_dict} keys")
-    if 'log' not in param_dict:
-        raise Exception(f"\'log\' not in {param_dict} keys")
+    search_space = {}
+    for name in tuning_config['hyperparameters'].keys():
+        param_dict = tuning_config['hyperparameters'][name]
+        if 'type' not in param_dict:
+            raise Exception(f"\'type\' not in {param_dict} keys")
 
-    if param_dict['type'] == 'float':
-        val = trial.suggest_float(name, param_dict['lower_bound'], param_dict['upper_bound'], log= param_dict['log'])
-    elif param_dict['type'] == 'int':
-        val = trial.suggest_int(name, param_dict['lower_bound'], param_dict['upper_bound'], log= param_dict['log'])
-    else:
-        raise Exception(f"Invalid parameter type {param_dict['type']}")
+        if param_dict['type'] == "uniform":
+            search_space[name] = tune.uniform(param_dict['lower_bound'], param_dict['upper_bound'])
+        elif param_dict['type'] == "quniform":
+            search_space[name] = tune.quniform(param_dict['lower_bound'], param_dict['upper_bound'], param_dict['q'])
+        elif param_dict['type'] == "loguniform":
+            search_space[name] = tune.loguniform(param_dict['lower_bound'], param_dict['upper_bound'])
+        elif param_dict['type'] == "qloguniform":
+            search_space[name] = tune.qloguniform(param_dict['lower_bound'], param_dict['upper_bound'], param_dict['q'])
+        elif param_dict['type'] == "randn":
+            search_space[name] = tune.randn(param_dict['lower_bound'], param_dict['upper_bound'])
+        elif param_dict['type'] == "qrandn":
+            search_space[name] = tune.qrandn(param_dict['lower_bound'], param_dict['upper_bound'], param_dict['q'])
+        elif param_dict['type'] == "randint":
+            search_space[name] = tune.randint(param_dict['lower_bound'], param_dict['upper_bound'])
+        elif param_dict['type'] == "qrandint":
+            search_space[name] = tune.qrandint(param_dict['lower_bound'], param_dict['upper_bound'], param_dict['q'])
+        elif param_dict['type'] == "lograndint":
+            search_space[name] = tune.lograndint(param_dict['lower_bound'], param_dict['upper_bound'])
+        elif param_dict['type'] == "qlograndint":
+            search_space[name] = tune.qlograndint(param_dict['lower_bound'], param_dict['upper_bound'], param_dict['q'])
+        elif param_dict['type'] == "choice":
+            search_space[name] = tune.choice(param_dict['choices'])
+        elif param_dict['type'] == "grid":
+            search_space[name] = tune.grid(param_dict['grid'])
+        else:
+            raise Exception(f"Parameter type {param_dict['type']} not supported.")
 
-    return val
+    return search_space
 
-def generate_config(hp_config, template, name, trial):
+def generate_config(config, template, name):
     """
     Generates a configuration file with suggested hyperparameter values.
 
-    This function suggests a value for the constant parameter using Optuna's trial,
+    This function suggests a value for the constant parameter using Raytun's config,
     updates the configuration template with this value, and saves the resulting
     configuration to a YAML file.
 
     Args:
-        hp_config (dict): Dictionary containing a hyperparameter information.
+        config (dict): Dictionary containing selected hyperparameters.
         template (dict): Configuration template dictionary that will be populated with
             the suggested values.
         name (str): Name to use for the output configuration file (without extension).
-        trial (optuna.Trial): Optuna trial object used for suggesting parameter values.
 
     Returns:
         dict: updated config file
@@ -119,10 +119,8 @@ def generate_config(hp_config, template, name, trial):
         - Writes a new YAML configuration file to ./config/{name}.yaml
         - Modifies the input template dictionary by adding the suggested constant value
     """
-    # Generate new constant
-    val = suggest_value('constant_value', hp_config['hyperparameters']['constant'], trial)
     # Fill out dictionary
-    template['model']['constant_value'] = val
+    template['model']['constant_value'] = config['constant']
     # Save config
     config_path = file_dir / 'config' / f'{name}.yaml'
     with open(config_path, 'w') as f:
@@ -159,10 +157,13 @@ def main(config_path: str, save_config: bool = True) -> None:
         }
     }
 
-    # Define objective for Optuna
-    def objective(trial):
+    # Generate parameter dictionary for Ray Tune
+    param_dict = create_search_space(hp_config)
+
+    # Define objective for Ray Tune
+    def objective(config):
         # Create config file
-        config_path = generate_config(hp_config, yaml_dict, 'hp_config', trial)
+        config_path = generate_config(config, yaml_dict, 'hp_config')
         # Run model
         run_opt_main(config_path)
         # Extract results
@@ -170,29 +171,30 @@ def main(config_path: str, save_config: bool = True) -> None:
             results = yaml.safe_load(f)
         score = sum_results(results)
         # Return score
-        return score
+        return {"score": score}
 
-    # Create optuna study with dashboard
-    try:
-        optuna.delete_study(study_name="ctf-baseline", storage="sqlite:///db.sqlite3")
-    except:
-        pass
-    study = optuna.create_study(
-        direction='maximize',
-        storage="sqlite:///db.sqlite3",
-        study_name="ctf-baseline"
-    )
+    # Create Ray Tune object
+    tuner = tune.Tuner(objective,
+                        param_space=param_dict,
+                        tune_config=tune.TuneConfig(
+                            #search_alg=OptunaSearch(), # Throws errors (seg faults) but still runs
+                            num_samples=10,
+                            metric="score",
+                            mode="max",
+                        ),
+                       )
     
     # Run optimization
-    study.optimize(objective, n_trials = hp_config['model']['n_trials'])
+    results = tuner.fit()
 
     # Remove last results file and hp_config.yaml (no loose files)
     results_file.unlink(missing_ok=True)
     (file_dir / 'config' / 'hp_config.yaml').unlink(missing_ok=True)
 
     # Obtain best hyperparameter value
-    best_constant = study.best_params['constant_value']
-    print(f"Best score: {study.best_value} (params: {study.best_params})")
+    best_score = results.get_best_result(metric="score", mode="max").metrics['score']
+    best_constant = results.get_best_result(metric="score", mode="max").config['constant']
+    print(f"Best score: {best_score} (params: {best_constant})")
 
     # Save final configuration yaml from hyperparameter optimization
     if not save_config: # Only False when unit testing
@@ -203,9 +205,6 @@ def main(config_path: str, save_config: bool = True) -> None:
         print("Final config file saved to:", config_path)
         with open(config_path, 'w') as f:
             yaml.dump(yaml_dict, f)
-
-    # You can check the Optuna dashboard with: `optuna-dashboard sqlite:///db.sqlite3 --port <REMOTE PORT>`
-    # Port forward to a remote machine with: `ssh -L <LOCAL PORT>:localhost:<REMOTE PORT> <REMOTE>`
 
     return None
 
