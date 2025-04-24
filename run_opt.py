@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 import datetime
 import numpy as np
-from ctf4science.data_module import load_dataset, load_validation_dataset, get_prediction_timesteps, parse_pair_ids, get_applicable_plots
+from ctf4science.data_module import load_dataset, load_validation_dataset, get_validation_prediction_timesteps, parse_pair_ids, get_applicable_plots
 from ctf4science.eval_module import evaluate_custom, save_results
 from ctf4science.visualization_module import Visualization
 from naive_baselines import NaiveBaseline
@@ -59,7 +59,8 @@ def main(config_path: str) -> None:
     for pair_id in pair_ids:
         # Generate training and validation splits (and burn-in matrix when applicable) 
         train_split = config['model']['train_split']
-        train_data, val_data, init_data, training_timesteps, prediction_timesteps = load_validation_dataset(dataset_name, pair_id, train_split)
+        train_data, val_data, init_data = load_validation_dataset(dataset_name, pair_id, train_split)
+        prediction_timesteps = get_validation_prediction_timesteps(dataset_name, pair_id, train_split)
 
         # Load initialization matrix if it exists
         if init_data is None:
