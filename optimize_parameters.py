@@ -12,6 +12,15 @@ from ctf4science.visualization_module import Visualization
 from naive_baselines import NaiveBaseline
 
 file_dir = Path(__file__).parent
+results_file = file_dir / 'results.yaml'
+
+def sum_results(results):
+    total = 0
+    for pair_dict in results['pairs']:
+        metric_dict = pair_dict['metrics']
+        for metric in metric_dict.keys():
+            total += metric_dict[metric]
+    return total
 
 def suggest_value(name, param_dict, trial):
     if 'type' not in param_dict:
@@ -34,7 +43,7 @@ def suggest_value(name, param_dict, trial):
 
 def generate_config(hp_config, template, name, trial):
     # Generate new constant
-    val = suggest_value('constant', hp_config['hyperparameters']['constant'], trial)
+    val = suggest_value('constant_value', hp_config['hyperparameters']['constant'], trial)
     # Fill out dictionary
     template['model']['constant_value'] = val
     # Save config
@@ -78,13 +87,11 @@ def main(config_path: str) -> None:
         generate_config(hp_config, yaml_dict, 'hp_config', trial)
         # Run model
         command = f'python {file_dir / "run_opt.py"} {file_dir / "config" / "hp_config.yaml"}'
-        print(command)
-        raise Exception("BREAK!")
         os.system(command)
         # Extract results
-        score = 0.0
-        # Average results for a single metric
-
+        with open(results_file, 'r') as f:
+            results = yaml.safe_load(f)
+        score = sum_results(results)
         # Return
         return score
 
@@ -101,6 +108,10 @@ def main(config_path: str) -> None:
     
     # Run optimization
     study.optimize(objective, n_trials = hp_config['model']['n_trials'])
+
+    # Remove last results file and hp_config.yaml
+    results_file.unlink(missing_ok=True)
+    (file_dir / 'config' / 'hp_config.yaml').unlink(missing_ok=True)
 
     # Return prediction matrix using best hyperparameter value
     best_constant = study.best_params['constant_value']

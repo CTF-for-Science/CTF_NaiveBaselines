@@ -12,7 +12,8 @@ from naive_baselines import NaiveBaseline
 
 # Delete results directory - used for storing batch_results
 file_dir = Path(__file__).parent
-# TODO
+results_file = file_dir / 'results.yaml'
+results_file.unlink(missing_ok=True)
 
 # Notes:
 # K value larger than 10 results in invalid spatio-temporal loss
@@ -102,12 +103,6 @@ def main(config_path: str) -> None:
         'pairs': []
     }
 
-    # Initialize Visualization object
-    viz = Visualization()
-
-    # Get applicable visualizations for the dataset
-    applicable_plots = get_applicable_plots(dataset_name)
-
     # Process each sub-dataset
     for pair_id in pair_ids:
         # Generate training and validation splits (and burn-in matrix when applicable) 
@@ -136,9 +131,6 @@ def main(config_path: str) -> None:
         # Evaluate predictions using default metrics
         results = evaluate_custom(dataset_name, pair_id, val_data, pred_data)
 
-        # Save results for this sub-dataset and get the path to the results directory
-        results_directory = save_results(dataset_name, model_name, batch_id, pair_id, config, pred_data, results)
-
         # Append metrics to batch results
         # Convert metric values to plain Python floats for YAML serialization
         batch_results['pairs'].append({
@@ -147,7 +139,7 @@ def main(config_path: str) -> None:
         })
 
     # Save aggregated batch results
-    with open(results_directory.parent / 'batch_results.yaml', 'w') as f:
+    with open(results_file, 'w') as f:
         yaml.dump(batch_results, f)
 
 if __name__ == '__main__':

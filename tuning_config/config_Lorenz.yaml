@@ -1,5 +1,5 @@
 dataset:
-  name: PDE_KS
+  name: ODE_Lorenz
 model:
   name: CTF_NaiveBaselines
   train_split: 0.8   # float in (0.7 and 1.0)
