@@ -1,4 +1,5 @@
 import os
+import sys
 import yaml
 import optuna
 import argparse
@@ -13,6 +14,11 @@ from naive_baselines import NaiveBaseline
 
 file_dir = Path(__file__).parent
 results_file = file_dir / 'results.yaml'
+
+# Update python PATH so that we can load run.py from CTF_NaiveBaselines directly
+sys.path.insert(0, str(file_dir))
+
+from run_opt import main as run_opt_main
 
 def sum_results(results):
     """
@@ -107,7 +113,7 @@ def generate_config(hp_config, template, name, trial):
         trial (optuna.Trial): Optuna trial object used for suggesting parameter values.
 
     Returns:
-        None: This function doesn't return anything but saves the configuration to disk.
+        dict: updated config file
 
     Side Effects:
         - Writes a new YAML configuration file to ./config/{name}.yaml
@@ -118,11 +124,12 @@ def generate_config(hp_config, template, name, trial):
     # Fill out dictionary
     template['model']['constant_value'] = val
     # Save config
-    with open(file_dir / 'config' / f'{name}.yaml', 'w') as f:
+    config_path = file_dir / 'config' / f'{name}.yaml'
+    with open(config_path, 'w') as f:
         yaml.dump(template, f)
-    return None
+    return config_path
 
-def main(config_path: str) -> None:
+def main(config_path: str, save_config: bool = True) -> None:
     """
     Main function to generate configuration files and run the naive baseline
     model on specified sub-datasets for hyperparameter optimization.
@@ -132,6 +139,7 @@ def main(config_path: str) -> None:
 
     Args:
         config_path (str): Path to the configuration file.
+        save_config (str): Save the final configuration file. (only False in unit tests)
     """
     # Load configuration
     with open(config_path, 'r') as f:
@@ -154,10 +162,9 @@ def main(config_path: str) -> None:
     # Define objective for Optuna
     def objective(trial):
         # Create config file
-        generate_config(hp_config, yaml_dict, 'hp_config', trial)
+        config_path = generate_config(hp_config, yaml_dict, 'hp_config', trial)
         # Run model
-        command = f'python {file_dir / "run_opt.py"} {file_dir / "config" / "hp_config.yaml"}'
-        os.system(command)
+        run_opt_main(config_path)
         # Extract results
         with open(results_file, 'r') as f:
             results = yaml.safe_load(f)
@@ -188,9 +195,14 @@ def main(config_path: str) -> None:
     print(f"Best score: {study.best_value} (params: {study.best_params})")
 
     # Save final configuration yaml from hyperparameter optimization
-    yaml_dict['model']['constant_value'] = best_constant
-    with open(file_dir / 'config' / f'config_{hp_config["dataset"]["name"]}_constant_batch_all.yaml', 'w') as f:
-        yaml.dump(yaml_dict, f)
+    if not save_config: # Only False when unit testing
+        print("Not saving final config file.")
+    else:
+        config_path = file_dir / 'config' / f'config_{hp_config["dataset"]["name"]}_constant_batch_all.yaml'
+        yaml_dict['model']['constant_value'] = best_constant
+        print("Final config file saved to:", config_path)
+        with open(config_path, 'w') as f:
+            yaml.dump(yaml_dict, f)
 
     # You can check the Optuna dashboard with: `optuna-dashboard sqlite:///db.sqlite3 --port <REMOTE PORT>`
     # Port forward to a remote machine with: `ssh -L <LOCAL PORT>:localhost:<REMOTE PORT> <REMOTE>`
@@ -200,5 +212,6 @@ def main(config_path: str) -> None:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help="Path to the hyperparameter configuration file.")
+    parser.add_argument('save_config', action='store_true', help="Save the final hyperparameter configuration file. Only used when unit testing.")
     args = parser.parse_args()
-    main(args.config)
+    main(args.config, args.save_config)

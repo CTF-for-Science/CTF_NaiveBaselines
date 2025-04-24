@@ -1,9 +1,0 @@
-dataset:
-  name: ODE_Lorenz
-model:
-  burn_in_split: 0.4
-  constant_value: -16.534236116049982
-  method: constant
-  name: CTF_NaiveBaselines
-  seed: 0
-  train_split: 0.8

@@ -1,8 +1,0 @@
-dataset:
-  name: PDE_KS
-model:
-  constant_value: -0.0008094302426779176
-  method: constant
-  name: CTF_NaiveBaselines
-  seed: 0
-  train_split: 0.8
