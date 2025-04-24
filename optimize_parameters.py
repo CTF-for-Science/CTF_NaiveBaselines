@@ -147,7 +147,7 @@ def main(config_path: str, save_config: bool = True) -> None:
     yaml_dict = {
         'dataset': {
             'name': hp_config['dataset']['name'],
-            'pair_id': [hp_config['model']['pair_id']],
+            'pair_id': hp_config['dataset']['pair_id'],
         },
         'model': {
             'name': hp_config['model']['name'],
@@ -202,7 +202,7 @@ def main(config_path: str, save_config: bool = True) -> None:
     if not save_config: # Only False when unit testing
         print("Not saving final config file.")
     else:
-        config_path = file_dir / 'config' / f'config_{hp_config["dataset"]["name"]}_constant_batch_{hp_config["model"]["pair_id"]}.yaml'
+        config_path = file_dir / 'config' / f'config_{hp_config["dataset"]["name"]}_constant_batch_{hp_config["dataset"]["pair_id"]}.yaml'
         yaml_dict['model']['constant_value'] = best_constant
         print("Final config file saved to:", config_path)
         with open(config_path, 'w') as f:
