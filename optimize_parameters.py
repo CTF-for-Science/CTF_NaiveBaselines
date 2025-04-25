@@ -14,7 +14,6 @@ from ctf4science.visualization_module import Visualization
 from naive_baselines import NaiveBaseline
 
 file_dir = Path(__file__).parent
-results_file = file_dir / 'results.yaml'
 
 # Update python PATH so that we can load run.py from CTF_NaiveBaselines directly
 sys.path.insert(0, str(file_dir))
@@ -120,7 +119,9 @@ def generate_config(config, template, name):
         - Modifies the input template dictionary by adding the suggested constant value
     """
     # Fill out dictionary
+    batch_id = str(tune.get_context().get_trial_id())
     template['model']['constant_value'] = config['constant']
+    template['model']['batch_id'] = batch_id
     # Save config
     config_path = file_dir / 'config' / f'{name}.yaml'
     with open(config_path, 'w') as f:
@@ -150,6 +151,7 @@ def main(config_path: str, save_config: bool = True) -> None:
             'pair_id': hp_config['dataset']['pair_id'],
         },
         'model': {
+            'batch_id': '0',
             'name': hp_config['model']['name'],
             'method': 'constant',
             'constant_value': None, # This will be replaced
@@ -163,13 +165,19 @@ def main(config_path: str, save_config: bool = True) -> None:
 
     # Define objective for Ray Tune
     def objective(config):
+        # Get batch_id
+        batch_id = str(tune.get_context().get_trial_id())
         # Create config file
-        config_path = generate_config(config, yaml_dict, 'hp_config')
+        config_path = generate_config(config, yaml_dict, f'hp_config_{batch_id}')
         # Run model
         run_opt_main(config_path)
-        # Extract results
+        # Extract results and clean up files
+        config_file = file_dir / 'config' / f'hp_config_{batch_id}.yaml'
+        results_file = file_dir / f'results_{batch_id}.yaml'
         with open(results_file, 'r') as f:
             results = yaml.safe_load(f)
+        results_file.unlink(missing_ok=True)
+        config_file.unlink(missing_ok=True)
         score = sum_results(results)
         # Return score
         return {"score": score}
@@ -180,18 +188,13 @@ def main(config_path: str, save_config: bool = True) -> None:
                         tune_config=tune.TuneConfig(
                             #search_alg=OptunaSearch(), # Throws errors (seg faults) but still runs
                             max_concurrent_trials=1,
-                            num_samples=10,
+                            num_samples=hp_config['model']['n_trials'],
                             metric="score",
                             mode="max",
-                        ),
-                       )
+                        ))
     
     # Run optimization
     results = tuner.fit()
-
-    # Remove last results file and hp_config.yaml (no loose files)
-    results_file.unlink(missing_ok=True)
-    (file_dir / 'config' / 'hp_config.yaml').unlink(missing_ok=True)
 
     # Obtain best hyperparameter value
     best_score = results.get_best_result(metric="score", mode="max").metrics['score']
@@ -202,8 +205,10 @@ def main(config_path: str, save_config: bool = True) -> None:
     if not save_config: # Only False when unit testing
         print("Not saving final config file.")
     else:
-        config_path = file_dir / 'config' / f'config_{hp_config["dataset"]["name"]}_constant_batch_{hp_config["dataset"]["pair_id"]}.yaml'
+        pair_ids = ''.join(map(str,hp_config["dataset"]["pair_id"]))
+        config_path = file_dir / 'config' / f'config_{hp_config["dataset"]["name"]}_constant_batch_{pair_ids}_optimized.yaml'
         yaml_dict['model']['constant_value'] = best_constant
+        yaml_dict['model'].pop('batch_id', None)
         print("Final config file saved to:", config_path)
         with open(config_path, 'w') as f:
             yaml.dump(yaml_dict, f)

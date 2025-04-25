@@ -12,8 +12,6 @@ from naive_baselines import NaiveBaseline
 
 # Delete results directory - used for storing batch_results
 file_dir = Path(__file__).parent
-results_file = file_dir / 'results.yaml'
-results_file.unlink(missing_ok=True)
 
 # Notes:
 # K value larger than 10 results in invalid spatio-temporal loss
@@ -43,9 +41,8 @@ def main(config_path: str) -> None:
 
     model_name = f"{config['model']['name']}_{config['model']['method']}"
 
-    # Generate a unique batch_id for this run, you can add any descriptions you want
-    #   e.g. f"batch_{learning_rate}_"
-    batch_id = "hyper_opt"
+    # batch_id is from optimize_parameters.py
+    batch_id = f"hyper_opt_{config['model']['batch_id']}"
  
     # Initialize batch results dictionary for summary
     batch_results = {
@@ -90,6 +87,7 @@ def main(config_path: str) -> None:
         })
 
     # Save aggregated batch results
+    results_file = file_dir / f"results_{config['model']['batch_id']}.yaml"
     with open(results_file, 'w') as f:
         yaml.dump(batch_results, f)
 
