@@ -1,0 +1,6 @@
+dataset:
+  name: sst
+  pair_id: [1, 2, 3, 4, 5, 6, 8, 9]  # Run on sub-datasets 1, 2, and 3
+model:
+  name: CTF_NaiveBaselinesLast
+  method: last

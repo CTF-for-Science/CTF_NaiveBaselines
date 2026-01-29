@@ -24,11 +24,11 @@ class NaiveBaseline:
     """
     A class representing naive baseline models for prediction.
 
-    Handles predictions using 'average', 'constant', or 'random' methods based on the configirl configuration.
+    Handles predictions using 'average', 'constant', 'last', or 'random' methods based on the configirl configuration.
 
     Attributes:
-        method (str): The model method ('average', 'constant', or 'random').
-        train_data (Optional[np.ndarray]): Training data, required for 'average' method.
+        method (str): The model method ('average', 'constant', 'last', or 'random').
+        train_data (Optional[np.ndarray]): Training data, required for 'average' method and 'last' method.
         constant_value (Optional[float]): Constant value for 'constant' method.
         random_params (Optional[Dict]): Parameters for 'random' method.
     """
@@ -108,6 +108,11 @@ class NaiveBaseline:
 
             # For simplicity, just use the first constant (no evaluation here)
             pred_data = np.full((self.spatial_dimension, self.prediction_horizon_steps), constants[0])
+
+        elif self.method == 'last':
+            if self.train_data is None:
+                raise ValueError("Training data is required for 'last' method.")
+            pred_data = np.broadcast_to(self.train_data[:,-1:], (self.train_data.shape[0], self.prediction_horizon_steps))
 
         else:
             raise ValueError(f"Unknown baseline method: {self.method}")
