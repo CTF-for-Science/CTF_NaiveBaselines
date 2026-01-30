@@ -1,5 +1,5 @@
 dataset:
-  name: Lorenz
+  name: ODE_Lorenz
   # pair_id omitted or set to 'all' to run on all sub-datasets
 model:
   name: CTF_NaiveBaselines
