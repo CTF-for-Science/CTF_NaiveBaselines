@@ -41,6 +41,8 @@ def main(config_path: str) -> None:
         batch_id = batch_id + f"{distribution}_{seed}"
     elif config['model']['method'] == 'average':
         batch_id = batch_id + f"avg"
+    elif config['model']['method'] == 'last':
+        batch_id = batch_id + "last"
  
     # Define the name of the output folder for your batch
     batch_id = f"{batch_id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
