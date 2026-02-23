@@ -81,7 +81,7 @@ def main(config_path: str) -> None:
         val_data = val_data.T
 
         # Evaluate predictions using default metrics
-        results = evaluate_custom(dataset_name, pair_id, val_data, pred_data)
+        results = evaluate_custom(dataset_name, pair_id, val_data, pred_data, flexible_k=True)
 
         # Append metrics to batch results
         # Convert metric values to plain Python floats for YAML serialization
