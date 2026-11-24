@@ -75,6 +75,21 @@ model:
 | `average`  | Predicts the mean of the training data           | `method: average`                       |
 | `constant` | Predicts a specified constant value              | `method: constant`<br>`constant_value: 0.0` |
 | `random`   | Generates random predictions from a distribution | `method: random`<br>`random_distribution: uniform` |
+| `last`     | Repeats the last observed value (persistence)    | `method: last`                           |
+
+## Windowed datasets (`buildings`)
+
+Pairs that define a `horizon` in the dataset YAML (currently `buildings`) are forecast window by window. `run.py` gets the lookback windows from `load_forecast_windows` and `run_opt.py` from `load_validation_forecast_windows`; both predict the target channel (indoor temperature) with shape `(windows, horizon, buildings)` and leave the windowing of the truth to `evaluate`/`evaluate_custom`. Covariates are ignored.
+
+- `last` (persistence): repeats each window's last lookback value of the target channel over the horizon.
+- `average`: the mean target channel over all training data of the pair (every train file, building and time step), one scalar.
+- `constant` / `random`: the configured or drawn constant.
+
+Windows are predicted `batch_size` at a time (model config, default 4096), so the lookback view of the G1 pairs (stride 1, about 35k windows) is never copied in one go. For tuning, `run_opt.py` reads `n_holdout` (source building IDs held out for generalization pairs; every variant of a held-out building is held out with it), `n_val_rows` (trailing target rows held out for forecasting pairs, default 2688) and `validation_seed` (default 0) from the model config; see `tuning_config/config_buildings.yaml`.
+
+```bash
+python models/CTF_NaiveBaselines/run.py models/CTF_NaiveBaselines/config/config_buildings_last_batch_all.yaml
+```
 
 ## Examples
 

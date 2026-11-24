@@ -4,10 +4,10 @@ from pathlib import Path
 from typing import List, Dict, Any
 import datetime
 import numpy as np
-from ctf4science.data_module import load_dataset, get_prediction_timesteps, parse_pair_ids, get_applicable_plots
+from ctf4science.data_module import load_dataset, load_forecast_windows, is_windowed_pair, get_prediction_timesteps, parse_pair_ids, get_applicable_plots
 from ctf4science.eval_module import evaluate, save_results
 from ctf4science.visualization_module import Visualization
-from naive_baselines import NaiveBaseline
+from naive_baselines import NaiveBaseline, WindowedNaiveBaseline, windowed_method_needs_train_data
 
 def main(config_path: str) -> None:
     """
@@ -63,27 +63,13 @@ def main(config_path: str) -> None:
 
     # Process each sub-dataset
     for pair_id in pair_ids:
-        # Load sub-dataset
-        train_data, init_data = load_dataset(dataset_name, pair_id, transpose=True)
-
-        # Load initialization matrix if it exists
-        if init_data is None:
-            # Stack all training matrices to get a single training matrix
-            train_data = np.concatenate(train_data, axis=1)
+        if is_windowed_pair(dataset_name, pair_id):
+            # Windowed forecasting pair (e.g. buildings): predict the target channel of every
+            # test window, (W, horizon, buildings); evaluate() cuts the truth windows itself
+            pred_data = predict_windowed(config, dataset_name, pair_id)
         else:
-            # If we are given a burn-in matrix, use it as the training matrix
-            train_data = init_data
+            pred_data = predict_series(config, dataset_name, pair_id)
 
-        # Load metadata (to provide forecast length)
-        prediction_timesteps = get_prediction_timesteps(dataset_name, pair_id)
-        prediction_horizon_steps = prediction_timesteps.shape[0]
-
-        # Initialize the model with the config and train_data
-        model = NaiveBaseline(config, train_data, prediction_horizon_steps, pair_id)
-
-        # Generate predictions
-        pred_data = model.predict()
-        pred_data = pred_data.T
         # Evaluate predictions using default metrics
         results = evaluate(dataset_name, pair_id, pred_data)
 
@@ -105,6 +91,59 @@ def main(config_path: str) -> None:
     # Save aggregated batch results
     with open(results_directory.parent / 'batch_results.yaml', 'w') as f:
         yaml.dump(batch_results, f)
+
+def predict_windowed(config: Dict[str, Any], dataset_name: str, pair_id: int) -> np.ndarray:
+    """
+    Predict every test forecast window of a windowed pair (a pair with a 'horizon', e.g. buildings).
+
+    Args:
+        config (Dict[str, Any]): Configuration dictionary.
+        dataset_name (str): Name of the dataset.
+        pair_id (int): ID of the windowed pair.
+
+    Returns:
+        np.ndarray: Predictions of shape (W, horizon, buildings).
+    """
+    # Lookback windows are a read-only view into the test series; the model reads them in batches
+    lookback, covariates = load_forecast_windows(dataset_name, pair_id)
+    train_data = load_dataset(dataset_name, pair_id)[0] if windowed_method_needs_train_data(config) else None
+    model = WindowedNaiveBaseline(config, pair_id, train_data)
+    return model.predict(lookback, covariates)
+
+def predict_series(config: Dict[str, Any], dataset_name: str, pair_id: int) -> np.ndarray:
+    """
+    Predict the test series of a (non-windowed) pair, in (Timesteps, Features) format.
+
+    Args:
+        config (Dict[str, Any]): Configuration dictionary.
+        dataset_name (str): Name of the dataset.
+        pair_id (int): ID of the pair.
+
+    Returns:
+        np.ndarray: Predictions of shape (Timesteps, Features).
+    """
+    # Load sub-dataset
+    train_data, init_data = load_dataset(dataset_name, pair_id, transpose=True)
+
+    # Load initialization matrix if it exists
+    if init_data is None:
+        # Stack all training matrices to get a single training matrix
+        train_data = np.concatenate(train_data, axis=1)
+    else:
+        # If we are given a burn-in matrix, use it as the training matrix
+        train_data = init_data
+
+    # Load metadata (to provide forecast length)
+    prediction_timesteps = get_prediction_timesteps(dataset_name, pair_id)
+    prediction_horizon_steps = prediction_timesteps.shape[0]
+
+    # Initialize the model with the config and train_data
+    model = NaiveBaseline(config, train_data, prediction_horizon_steps, pair_id)
+
+    # Generate predictions
+    pred_data = model.predict()
+    pred_data = pred_data.T
+    return pred_data
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

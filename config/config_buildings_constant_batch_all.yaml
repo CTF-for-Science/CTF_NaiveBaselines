@@ -1,0 +1,8 @@
+dataset:
+  name: buildings
+  # pair_id omitted or set to 'all' to run on all sub-datasets
+model:
+  name: CTF_NaiveBaselines
+  method: constant
+  constant_value: 293.15  # indoor temperature in K (20 °C)
+  batch_size: 4096        # forecast windows predicted at once

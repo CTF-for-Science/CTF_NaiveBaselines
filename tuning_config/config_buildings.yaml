@@ -1,0 +1,18 @@
+dataset:
+  name: buildings
+  pair_id: [1,2,3,4,5,6,7,8,9,10,11,12]
+model:
+  name: CTF_NaiveBaselines
+  n_holdout: 45      # generalization pairs: source building IDs held out for validation
+                     # (every excitation variant of a held-out building is held out with it)
+  n_val_rows: 2688   # forecasting pairs: last rows of the target Oct-Dec data used for validation (28 days)
+  validation_seed: 0 # seed of the held-out building shuffle
+  batch_size: 4096   # forecast windows predicted at once
+  seed: 0
+  n_trials: 3
+  method: 'constant'
+hyperparameters: # Specify hyperparameters and ranges
+  constant_value:  # indoor temperature in K
+    type: uniform
+    lower_bound: 285.0
+    upper_bound: 315.0

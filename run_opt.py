@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import List, Dict, Any
 import datetime
 import numpy as np
-from ctf4science.data_module import load_dataset, load_validation_dataset, get_validation_prediction_timesteps, parse_pair_ids, get_applicable_plots
+from ctf4science.data_module import load_dataset, load_validation_dataset, load_validation_forecast_windows, is_windowed_pair, get_validation_prediction_timesteps, parse_pair_ids, get_applicable_plots
 from ctf4science.eval_module import evaluate_custom, save_results
 from ctf4science.visualization_module import Visualization
-from naive_baselines import NaiveBaseline
+from naive_baselines import NaiveBaseline, WindowedNaiveBaseline, windowed_method_needs_train_data
 
 # Delete results directory - used for storing batch_results
 file_dir = Path(__file__).parent
@@ -54,6 +54,15 @@ def main(config_path: str) -> None:
 
     # Process each sub-dataset
     for pair_id in pair_ids:
+        if is_windowed_pair(dataset_name, pair_id):
+            # Windowed forecasting pair (e.g. buildings): evaluate on validation windows cut from training data
+            results = validate_windowed(config, dataset_name, pair_id)
+            batch_results['pairs'].append({
+                'pair_id': pair_id,
+                'metrics': results
+            })
+            continue
+
         # Generate training and validation splits (and burn-in matrix when applicable) 
         train_split = config['model']['train_split']
         train_data, val_data, init_data = load_validation_dataset(dataset_name, pair_id, train_split, transpose=True)
@@ -94,6 +103,40 @@ def main(config_path: str) -> None:
     results_file = file_dir / f"results_{config['model']['batch_id']}.yaml"
     with open(results_file, 'w') as f:
         yaml.dump(batch_results, f)
+
+def validate_windowed(config: Dict[str, Any], dataset_name: str, pair_id: int) -> Dict[str, float]:
+    """
+    Evaluate the model on the validation windows of a windowed pair (a pair with a 'horizon', e.g. buildings).
+
+    The split follows `load_validation_forecast_windows`: generalization pairs hold out
+    `model.n_holdout` source building IDs (all their columns, so the number of validation
+    buildings can exceed n_holdout); forecasting pairs hold out the last `model.n_val_rows`
+    rows (default 2688) of the target training data. `model.validation_seed` (default 0)
+    seeds the building shuffle.
+
+    Args:
+        config (Dict[str, Any]): Configuration dictionary.
+        dataset_name (str): Name of the dataset.
+        pair_id (int): ID of the windowed pair.
+
+    Returns:
+        Dict[str, float]: Evaluation results (metric name -> score).
+    """
+    model_config = config['model']
+    # n_holdout is only used by generalization pairs; without it they fail in the loader
+    # ("n_holdout must be at least 1 ..."), while forecasting pairs ignore it
+    train_data, lookback, covariates, val_data = load_validation_forecast_windows(
+        dataset_name,
+        pair_id,
+        n_holdout=model_config.get('n_holdout', 0),
+        n_val_rows=model_config.get('n_val_rows', 2688),
+        seed=model_config.get('validation_seed', 0),
+    )
+    model = WindowedNaiveBaseline(config, pair_id, train_data if windowed_method_needs_train_data(config) else None)
+    # Predictions are (W, horizon, buildings), with the building count of the validation series;
+    # evaluate_custom cuts the truth windows from the continuous validation series
+    pred_data = model.predict(lookback, covariates)
+    return evaluate_custom(dataset_name, pair_id, val_data, pred_data)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

@@ -1,0 +1,7 @@
+dataset:
+  name: buildings
+  # pair_id omitted or set to 'all' to run on all sub-datasets
+model:
+  name: CTF_NaiveBaselines
+  method: last          # persistence: repeat the last lookback indoor temperature over the horizon
+  batch_size: 4096      # forecast windows predicted at once (G1 pairs have ~35k windows)

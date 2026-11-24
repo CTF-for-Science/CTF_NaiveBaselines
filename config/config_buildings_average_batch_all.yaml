@@ -1,0 +1,7 @@
+dataset:
+  name: buildings
+  # pair_id omitted or set to 'all' to run on all sub-datasets
+model:
+  name: CTF_NaiveBaselines
+  method: average       # mean indoor temperature over all training data (one scalar per pair)
+  batch_size: 4096      # forecast windows predicted at once
